@@ -1,40 +1,49 @@
 # Import python packages
 import streamlit as st
 from snowflake.snowpark.functions import col
+import requests
+
+# Write directly to the app
+st.title(":cup_with_straw: Customize Your Smoothie! :cup_with_straw:")
+st.write(
+    """Choose the fruits you want in your custom smoothie!
+    """)
+
+name_on_order = st.text_input("Name on Smoothie:")
+st.write("The nane on your Smoothie will be:", name_on_order)
 
 cnx = st.connection("snowflake")
 session = cnx.session()
+my_dataframe = session.table("smoothies.public.fruit_options").select(col('fruit_name'))
+st.dataframe(data=my_dataframe, use_container_width=True)
 
-# Write directly to the app
-st.title("データ分析アプリ:bar_chart:")
-st.write(
-    """ここに説明を追加
-    """
-)
+ingredients_list = st.multiselect(
+    'Choose up to 5 ingredients:'
+    ,my_dataframe
+    ,max_selections=5
+    )
 
-uploaded_file = st.file_uploader("Choose a file")
-if uploaded_file is not None:
-    # To read file as bytes:
-    bytes_data = uploaded_file.getvalue()
-    st.write(bytes_data)
+if ingredients_list:
 
-    # To convert to a string based IO:
-    stringio = StringIO(uploaded_file.getvalue().decode("utf-8"))
-    st.write(stringio)
+   ingredients_string = ''
 
-    # To read file as string:
-    string_data = stringio.read()
-    st.write(string_data)
+   for fruit_chosen in ingredients_list:
+       ingredients_string += fruit_chosen + ' '
+       st.subheader(fruit_chosen + 'Nutrition Infomation')
+       fruityvice_response = requests.get("https://fruityvice.com/api/fruit/" + fruit_chosen)
+       fv_df = st.dataframe(data=fruityvice_response.json(), use_container_width=True)
 
-    # Can be used wherever a "file-like" object is accepted:
-    dataframe = pd.read_csv(uploaded_file)
-    st.write(dataframe)
+   #st.write(ingredients_string)
 
+   my_insert_stmt = """ insert into smoothies.public.orders(ingredients, name_on_order)
+            values ('""" + ingredients_string + """','"""+name_on_order+ """')"""
+   
+   #st.write(my_insert_stmt)
+   #st.stop()
 
+   #st.write(my_insert_stmt)
+   time_to_insert = st.button('Submit Order')
 
-option = st.selectbox(
-    "How would you like to be contacted?",
-    ("Email", "Home phone", "Mobile phone"),
-)
-
-st.write("You selected:", option)
+   if time_to_insert:
+       session.sql(my_insert_stmt).collect()
+       st.success('Your Smoothie is ordered!, ' +name_on_order+'!', icon="✅")
